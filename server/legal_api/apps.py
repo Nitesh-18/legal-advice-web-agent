@@ -1,0 +1,7 @@
+from django.apps import AppConfig
+
+
+class LegalApiConfig(AppConfig):
+    default_auto_field = 'django.db.models.BigAutoField'
+    name = 'legal_api'
+    verbose_name = 'Legal Advice API'
