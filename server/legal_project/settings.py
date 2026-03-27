@@ -13,6 +13,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = config('SECRET_KEY', default='django-insecure-change-this-in-production-12345')
 DEBUG = config('DEBUG', default=True, cast=bool)
 ALLOWED_HOSTS = str(config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=str)).split(',')
+# ALLOWED_HOSTS = ['*']
 
 # Application definition
 INSTALLED_APPS = [
@@ -95,7 +96,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # CORS Settings
 CORS_ALLOWED_ORIGINS = config(
     'CORS_ALLOWED_ORIGINS',
-    default='http://localhost:3000,http://127.0.0.1:3000',
+    default='https://sd0fp1ht-3000.inc1.devtunnels.ms,http://localhost:3000,http://127.0.0.1:3000',
     cast=str,
 )
 CORS_ALLOWED_ORIGINS = str(CORS_ALLOWED_ORIGINS).split(',')

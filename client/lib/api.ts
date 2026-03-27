@@ -1,4 +1,4 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://sd0fp1ht-8000.inc1.devtunnels.ms' || 'http://localhost:8000';
 
 export interface Message {
   id: string;
