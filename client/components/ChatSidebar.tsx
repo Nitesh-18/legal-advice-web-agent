@@ -3,16 +3,10 @@
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { 
-  MessageSquare, 
-  Trash2, 
-  Plus, 
-  ChevronLeft, 
-  ChevronRight,
-  Clock
-} from "lucide-react"
+import { ScrollArea } from "@/components/ui/scroll-area" 
+import { MessageSquare, Trash2, Plus, ChevronLeft, ChevronRight, Clock, Cloud, HardDrive } from "lucide-react"
 import { ChatSession, getAllChatSessions, deleteChatSession } from "@/lib/chatStorage"
+import { fetchRemoteSessions, deleteRemoteSession, getAuthToken } from "@/lib/api"
 import { useRouter } from "next/navigation"
 
 interface ChatSidebarProps {
@@ -21,8 +15,9 @@ interface ChatSidebarProps {
 }
 
 export function ChatSidebar({ currentSessionId, onNewChat }: ChatSidebarProps) {
-  const [sessions, setSessions] = useState<ChatSession[]>([])
+  const [sessions, setSessions] = useState<any[]>([])
   const [isCollapsed, setIsCollapsed] = useState(false)
+  const [isAuth, setIsAuth] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -44,20 +39,49 @@ export function ChatSidebar({ currentSessionId, onNewChat }: ChatSidebarProps) {
     }
   }, [])
 
-  const loadSessions = () => {
-    const allSessions = getAllChatSessions()
-    setSessions(allSessions)
+  const loadSessions = async () => {
+    const token = getAuthToken()
+    setIsAuth(!!token)
+    if (token) {
+      try {
+        const remoteSessions = await fetchRemoteSessions()
+        // Format to match local structure roughly
+        setSessions(remoteSessions.map(rs => ({
+          id: rs.id.toString(),
+          title: rs.title,
+          updatedAt: new Date(rs.updated_at),
+          messages: rs.messages || []
+        })))
+      } catch (err) {
+        console.error("Failed to load remote sessions", err)
+      }
+    } else {
+      const allSessions = getAllChatSessions()
+      setSessions(allSessions.map(s => ({
+        ...s,
+        updatedAt: new Date(s.updatedAt)
+      })))
+    }
   }
 
-  const handleDeleteSession = (sessionId: string, e: React.MouseEvent) => {
+  const handleDeleteSession = async (sessionId: string, e: React.MouseEvent) => {
     e.stopPropagation()
     
     if (confirm('Are you sure you want to delete this chat?')) {
-      deleteChatSession(sessionId)
-      loadSessions()
+      if (getAuthToken()) {
+        try {
+          await deleteRemoteSession(parseInt(sessionId))
+          await loadSessions()
+        } catch (err) {
+          console.error("Failed to delete remote session")
+        }
+      } else {
+        deleteChatSession(sessionId)
+        loadSessions()
+      }
       
       // If deleting current session, go to home
-      if (sessionId === currentSessionId) {
+      if (sessionId === currentSessionId?.toString()) {
         router.push('/')
       }
     }
@@ -152,7 +176,7 @@ export function ChatSidebar({ currentSessionId, onNewChat }: ChatSidebarProps) {
               <Card
                 key={session.id}
                 className={`p-3 cursor-pointer transition-colors hover:bg-accent group ${
-                  currentSessionId === session.id ? 'bg-accent border-primary' : ''
+                  currentSessionId?.toString() === session.id.toString() ? 'bg-accent border-primary' : ''
                 }`}
                 onClick={() => handleSelectSession(session.id)}
               >
@@ -185,8 +209,20 @@ export function ChatSidebar({ currentSessionId, onNewChat }: ChatSidebarProps) {
 
       {/* Footer */}
       <div className="p-4 border-t text-xs text-muted-foreground">
-        <p>💾 Chats saved locally</p>
-        <p className="mt-1">Limited to last 50 conversations</p>
+        {isAuth ? (
+          <div className="flex items-center gap-2 text-primary">
+            <Cloud className="h-4 w-4" />
+            <p>Chats securely synced to cloud</p>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <HardDrive className="h-4 w-4" />
+            <div>
+              <p>Chats saved locally</p>
+              <p className="mt-0.5 opacity-70">Sign in to sync your history</p>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

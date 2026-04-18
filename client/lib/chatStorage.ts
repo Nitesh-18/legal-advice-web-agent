@@ -9,6 +9,8 @@ export interface ChatSession {
     role: 'user' | 'assistant'
     content: string
     timestamp: Date
+    cases?: any[]
+    state?: string
   }>
 }
 

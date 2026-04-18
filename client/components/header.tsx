@@ -2,11 +2,31 @@
 
 import { Button } from "@/components/ui/button"
 import { Menu, X } from "lucide-react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
+import { logout, getAuthToken } from "@/lib/api"
+import { useRouter } from "next/navigation"
 
 export function Header() {
   const [menuOpen, setMenuOpen] = useState(false)
+  const [isAuth, setIsAuth] = useState(false)
+  const router = useRouter()
+
+  useEffect(() => {
+    const checkAuth = () => {
+      setIsAuth(!!getAuthToken())
+    }
+    checkAuth()
+    window.addEventListener('authChange', checkAuth)
+    return () => window.removeEventListener('authChange', checkAuth)
+  }, [])
+
+  const handleLogout = () => {
+    logout()
+    setIsAuth(false)
+    window.dispatchEvent(new Event('authChange'))
+    router.push('/')
+  }
 
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -43,7 +63,18 @@ export function Header() {
           </nav>
 
           <div className="flex items-center gap-4">
-            <Button className="hidden md:inline-flex">Analyze Case</Button>
+            {isAuth ? (
+              <>
+                <Link href="/chat">
+                  <Button className="hidden md:inline-flex bg-primary hover:bg-primary/90 shadow-md transition-all">Go to Chat</Button>
+                </Link>
+                <Button variant="outline" className="hidden md:inline-flex" onClick={handleLogout}>Logout</Button>
+              </>
+            ) : (
+              <Link href="/login">
+                <Button className="hidden md:inline-flex bg-primary hover:bg-primary/90 shadow-md transition-all">Login / Sign up</Button>
+              </Link>
+            )}
 
             {/* Mobile Menu Button */}
             <button className="md:hidden p-2" onClick={() => setMenuOpen(!menuOpen)}>
@@ -76,7 +107,18 @@ export function Header() {
             <Link href="#" className="text-sm font-medium text-foreground hover:text-primary transition-colors">
               FAQ
             </Link>
-            <Button className="w-full">Analyze Case</Button>
+            {isAuth ? (
+              <>
+                <Link href="/chat" className="w-full">
+                  <Button className="w-full bg-primary hover:bg-primary/90 shadow-md transition-all">Go to Chat</Button>
+                </Link>
+                <Button variant="outline" className="w-full" onClick={handleLogout}>Logout</Button>
+              </>
+            ) : (
+              <Link href="/login" className="w-full">
+                <Button className="w-full bg-primary hover:bg-primary/90 shadow-md transition-all">Login / Sign up</Button>
+              </Link>
+            )}
           </nav>
         )}
       </div>

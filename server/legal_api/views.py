@@ -2,16 +2,23 @@
 API Views for Legal Advice Application
 """
 
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, parser_classes, permission_classes
+from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
-from rest_framework import status
+from rest_framework import status, viewsets
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.views.decorators.csrf import csrf_exempt
-from django.utils.decorators import method_decorator
+from django.contrib.auth.models import User
 from django.db import models
 import logging
 
 from .services import model_service, ModelAPIError
-from .models import LegalQuery
+from .services import model_service, ModelAPIError
+from .kanoon_service import kanoon_service
+from .document_service import document_service
+from .orchestrator_service import orchestrator_service
+from .models import LegalQuery, ChatSession, ChatMessage
+from .serializers import UserSerializer, ChatSessionSerializer, ChatMessageSerializer
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +95,135 @@ def analyze_case(request):
 
 
 @api_view(['POST'])
+@permission_classes([AllowAny])
+def register_user(request):
+    """
+    Register a new user
+    POST /api/auth/register/
+    """
+    serializer = UserSerializer(data=request.data)
+    if serializer.is_valid():
+        user = serializer.save()
+        return Response({
+            "message": "User created successfully",
+            "user": {
+                "id": user.id,
+                "username": user.username,
+                "email": user.email
+            }
+        }, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class ChatSessionViewSet(viewsets.ModelViewSet):
+    """
+    CRUD for ChatSessions
+    """
+    serializer_class = ChatSessionSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return ChatSession.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def add_chat_message(request, session_id):
+    """
+    Add a message to a session, optionally process through orchestrator.
+    POST /api/chat/sessions/<id>/messages/
+    """
+    try:
+        session = ChatSession.objects.get(id=session_id, user=request.user)
+    except ChatSession.DoesNotExist:
+        return Response({'error': 'Session not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    role = request.data.get('role')
+    content = request.data.get('content')
+    state = request.data.get('state')
+
+    if not content:
+        return Response({'error': 'Content is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Save user message
+    user_msg = ChatMessage.objects.create(
+        session=session,
+        role='user',
+        content=content
+    )
+
+    if role == 'user':
+        # Automatically generate assistant response using orchestrator
+        try:
+            result = orchestrator_service.research_query(content, state)
+            
+            # Save assistant message
+            assistant_msg = ChatMessage.objects.create(
+                session=session,
+                role='assistant',
+                content=result['answer'],
+                cases=result.get('cases', []),
+                state=result.get('state')
+            )
+            
+            # Update session title if it's the first message
+            if session.messages.count() <= 2:
+                session.title = content[:60] + ('...' if len(content) > 60 else '')
+                session.save()
+                
+            return Response({
+                'success': True,
+                'user_message': ChatMessageSerializer(user_msg).data,
+                'assistant_message': ChatMessageSerializer(assistant_msg).data,
+                'response_time': result['response_time']
+            })
+        except Exception as e:
+            logger.error(f"Error generating response: {e}")
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+    return Response(ChatMessageSerializer(user_msg).data)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def sync_session(request):
+    """
+    Sync an entire chat session from the frontend to the DB
+    POST /api/chat/sessions/sync/
+    """
+    session_id = request.data.get('id')
+    title = request.data.get('title', 'New Chat')
+    messages_data = request.data.get('messages', [])
+    
+    session = None
+    if session_id:
+        try:
+            session_id_int = int(session_id)
+            session = ChatSession.objects.get(id=session_id_int, user=request.user)
+            session.title = title
+            session.save()
+        except (ValueError, TypeError, ChatSession.DoesNotExist):
+            pass
+            
+    if not session:
+        session = ChatSession.objects.create(user=request.user, title=title)
+        
+    session.messages.all().delete()
+    
+    for msg in messages_data:
+        ChatMessage.objects.create(
+            session=session,
+            role=msg.get('role', 'user'),
+            content=msg.get('content', ''),
+            cases=msg.get('cases', []),
+            state=msg.get('state')
+        )
+        
+    return Response({'success': True, 'id': str(session.id)})
+
+
+@api_view(['POST'])
 @csrf_exempt
 def ask_legal_question(request):
     """
@@ -106,7 +242,8 @@ def ask_legal_question(request):
             )
         
         try:
-            result = model_service.ask_question(question)
+            state = request.data.get('state', None)
+            result = orchestrator_service.research_query(question, state)
             
             # Log the query
             LegalQuery.objects.create(
@@ -120,8 +257,10 @@ def ask_legal_question(request):
             return Response({
                 'success': True,
                 'answer': result['answer'],
+                'cases': result.get('cases', []),
                 'question': question,
-                'response_time': result['response_time']
+                'response_time': result['response_time'],
+                'state': result.get('state')
             })
             
         except ModelAPIError as e:
@@ -272,3 +411,94 @@ def query_stats(request):
             {'error': 'Could not retrieve stats'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+@api_view(['GET'])
+def case_search(request):
+    """
+    Search Indian Kanoon cases
+    GET /api/case-search?q=<query>
+    """
+    query = request.GET.get('q', '').strip()
+    if not query:
+        return Response({'error': 'Query parameter "q" is required'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        results = kanoon_service.search_cases(query)
+        return Response({'success': True, 'results': results, 'query': query})
+    except Exception as e:
+        logger.error(f"Error in case_search: {e}")
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['POST'])
+@csrf_exempt
+@parser_classes([MultiPartParser, FormParser])
+def analyze_document(request):
+    """
+    Upload and analyze document
+    POST /api/analyze-document
+    """
+    if 'file' not in request.FILES:
+        return Response({'error': 'No file uploaded'}, status=status.HTTP_400_BAD_REQUEST)
+        
+    file_obj = request.FILES['file']
+    
+    try:
+        text = document_service.extract_text_from_file(file_obj, file_obj.name)
+        
+        # Send to Gemini for clause extraction, risk analysis, summary
+        prompt = f"""Analyze the following legal document text:
+        
+{text[:15000]}  # limit text length for safety
+
+Please provide:
+1. Summary of the document
+2. Key Clauses Extraction
+3. Risk Analysis
+"""
+        result = model_service._make_request(prompt)
+        
+        return Response({
+            'success': True,
+            'analysis': result['content'],
+            'response_time': result['response_time']
+        })
+        
+    except Exception as e:
+        logger.error(f"Error analyzing document: {e}")
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['POST'])
+@csrf_exempt
+def generate_notice(request):
+    """
+    Generate legal notice
+    POST /api/generate-notice
+    Body: { "party_names": "...", "issue": "...", "jurisdiction": "..." }
+    """
+    try:
+        party_names = request.data.get('party_names', '')
+        issue = request.data.get('issue', '')
+        jurisdiction = request.data.get('jurisdiction', '')
+        
+        if not party_names or not issue:
+            return Response({'error': 'party_names and issue are required'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        prompt = f"""Generate a properly formatted Indian legal notice.
+        
+Parties Involved: {party_names}
+Issue: {issue}
+Jurisdiction/State: {jurisdiction}
+
+Provide a professional legal notice drafted for this scenario, complete with placeholders for dates, signatures, and advocate details where necessary. Ensure it follows standard Indian legal notice formats.
+"""
+        result = model_service._make_request(prompt)
+        
+        return Response({
+            'success': True,
+            'notice': result['content'],
+            'response_time': result['response_time']
+        })
+        
+    except Exception as e:
+        logger.error(f"Error generating notice: {e}")
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
