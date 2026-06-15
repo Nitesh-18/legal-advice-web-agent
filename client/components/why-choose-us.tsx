@@ -6,7 +6,7 @@ export function WhyChooseUs() {
     {
       icon: Zap,
       title: "AI-Powered Analysis",
-      description: "Advanced AI model trained on thousands of Indian court cases for accurate legal insights.",
+      description: "RAG-enhanced AI Engine tailored for Indian court cases, delivering accurate and verified legal insights.",
     },
     {
       icon: BookOpen,

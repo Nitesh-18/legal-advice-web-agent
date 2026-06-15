@@ -139,7 +139,7 @@ const askQuestion = async (question) => {
 }
 ```
 
-**Solution:** Check if your Colab/HF Spaces is running and MODEL_API_URL is correct in .env
+**Solution:** Check if GOOGLE_API_KEY is correct in .env
 
 ### Bad Request (400)
 ```json

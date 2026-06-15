@@ -70,11 +70,7 @@ export function Footer() {
                   Privacy Policy
                 </Link>
               </li>
-              <li>
-                <Link href="#" className="hover:opacity-80 transition-opacity">
-                  Model Versions
-                </Link>
-              </li>
+
             </ul>
           </div>
 

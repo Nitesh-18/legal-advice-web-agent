@@ -1,6 +1,6 @@
 # Legal Advice Web Agent - Django Backend
 
-Complete Django REST API backend for the Legal Advice Web Agent application, integrating with InLegalLLaMA model.
+Complete Django REST API backend for the Legal Advice Web Agent application, powered by a RAG-enhanced AI Engine for Indian legal analysis.
 
 ## 🚀 Features
 
@@ -16,7 +16,7 @@ Complete Django REST API backend for the Legal Advice Web Agent application, int
 - Python 3.9 or higher
 - pip (Python package manager)
 - Virtual environment (recommended)
-- InLegalLLaMA model running on Colab or HuggingFace Spaces
+- Google API Key for the AI Engine
 
 ## 🛠️ Installation & Setup
 
@@ -62,14 +62,14 @@ SECRET_KEY=your-secret-key-here-change-this
 DEBUG=True
 ALLOWED_HOSTS=localhost,127.0.0.1
 
-# Model API - IMPORTANT: Update this!
-MODEL_API_URL=https://your-ngrok-url.ngrok-free.app
+# AI Engine Configuration - IMPORTANT: Add your API key!
+GOOGLE_API_KEY=AIza_your_api_key_here
 
 # CORS - Your Next.js frontend URL
 CORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 ```
 
-**Important:** Replace `MODEL_API_URL` with your actual Colab ngrok URL or HuggingFace Spaces URL.
+**Important:** Set `GOOGLE_API_KEY` with your API key.
 
 ### Step 5: Run Database Migrations
 
@@ -202,8 +202,7 @@ Get statistics about API usage.
 | `SECRET_KEY` | Django secret key | - |
 | `DEBUG` | Debug mode | True |
 | `ALLOWED_HOSTS` | Allowed hosts | localhost,127.0.0.1 |
-| `MODEL_API_URL` | Model API endpoint | - |
-| `CORS_ALLOWED_ORIGINS` | Frontend URLs | http://localhost:3000 |
+| `GOOGLE_API_KEY` | AI Engine API key | - |
 
 ### CORS Configuration
 
@@ -240,21 +239,12 @@ response = requests.post(
 print(response.json())
 ```
 
-## 🎯 Connecting to Your Model
+## 🎯 AI Engine Configuration
 
-### Option 1: Google Colab with ngrok
+The AI Engine is configured via the `GOOGLE_API_KEY` in your `.env` file. The RAG pipeline enriches queries with relevant legal precedents before generating responses.
 
-1. Run your Colab notebook with the Flask API
-2. Copy the ngrok URL (e.g., `https://abc123.ngrok-free.app`)
-3. Update `MODEL_API_URL` in `.env`
-4. Restart Django server
-
-### Option 2: HuggingFace Spaces
-
-1. Deploy your model to HF Spaces
-2. Copy the Space URL (e.g., `https://username-space.hf.space`)
-3. Update `MODEL_API_URL` in `.env`
-4. Restart Django server
+1. Set `GOOGLE_API_KEY` in `server/.env`
+2. Restart the Django server
 
 ## 🗄️ Database
 
@@ -303,11 +293,11 @@ View logs through:
 
 ### "Cannot connect to AI model server"
 
-**Solution:** Ensure your Colab/HF Spaces is running and the URL in `.env` is correct.
+**Solution:** Ensure your `GOOGLE_API_KEY` is set correctly in `.env`.
 
 ```bash
-# Test the model URL directly
-curl https://your-model-url/health
+# Test the health endpoint
+curl http://localhost:8000/api/model-health/
 ```
 
 ### CORS Errors
@@ -377,7 +367,7 @@ This project is provided as-is for your legal advice application.
 
 If you encounter issues:
 1. Check the troubleshooting section
-2. Verify your model is running
+2. Verify your API key is set
 3. Check Django logs for errors
 4. Ensure all environment variables are set
 

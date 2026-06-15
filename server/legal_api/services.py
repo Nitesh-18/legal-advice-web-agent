@@ -232,8 +232,8 @@ class LegalModelService:
             return {
                 'status': 'online',
                 'details': {
-                    'model': self.model,
-                    'provider': 'Google Gemini',
+                    'model': 'Legal AI Engine',
+                    'provider': 'RAG-Enhanced Legal Analysis',
                     'response_time': result['response_time']
                 }
             }

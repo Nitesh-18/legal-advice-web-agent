@@ -58,7 +58,7 @@ legal_backend/
 - Database settings
 - CORS configuration
 - Installed apps
-- **Important:** Configure MODEL_API_URL here via .env
+- **Important:** Configure GOOGLE_API_KEY here via .env
 
 **`legal_project/urls.py`**
 - Main URL routing
@@ -80,7 +80,7 @@ legal_backend/
   - `query_stats`: Get usage statistics
 
 **`legal_api/services.py`**
-- `LegalModelService`: Handles communication with InLegalLLaMA
+- `LegalModelService`: Handles communication with the AI Engine (RAG-enhanced)
 - Error handling and retry logic
 - Request/response management
 
@@ -125,14 +125,14 @@ Stores precedent cases for Case Explorer
 ## API Flow
 
 ```
-Client (Next.js) → Django Views → Services → InLegalLLaMA API
+Client (Next.js) → Django Views → Services → RAG Pipeline → AI Engine
                           ↓
                     Database (logs)
 ```
 
 1. **Client** sends request to Django API
 2. **View** validates request data
-3. **Service** calls InLegalLLaMA model
+3. **Service** calls AI Engine via RAG pipeline
 4. **Response** is returned to client
 5. **Query** is logged to database
 
@@ -143,7 +143,7 @@ Client (Next.js) → Django Views → Services → InLegalLLaMA API
 2. Create virtual environment
 3. Install dependencies (requirements.txt)
 4. Copy .env.example to .env
-5. Configure MODEL_API_URL in .env
+5. Configure GOOGLE_API_KEY in .env
 6. Run migrations
 7. Create admin user (optional)
 8. Start server
@@ -168,7 +168,7 @@ Client (Next.js) → Django Views → Services → InLegalLLaMA API
 ## Next Steps
 
 1. ✅ Extract and setup project
-2. ✅ Configure .env with MODEL_API_URL
+2. ✅ Configure .env with GOOGLE_API_KEY
 3. ✅ Run migrations
 4. ✅ Test with curl/test_api.py
 5. ✅ Connect Next.js frontend

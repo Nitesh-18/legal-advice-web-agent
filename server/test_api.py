@@ -102,8 +102,7 @@ def main():
     
     print("\n⚠️  Make sure:")
     print("1. Django server is running (python manage.py runserver)")
-    print("2. Your model API is running (Colab/HF Spaces)")
-    print("3. MODEL_API_URL is set correctly in .env")
+    print("2. GOOGLE_API_KEY is set correctly in .env")
     
     input("\nPress Enter to continue...")
     

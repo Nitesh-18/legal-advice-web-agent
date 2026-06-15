@@ -33,7 +33,7 @@ if not exist .env (
     echo.
     echo Creating .env file from template...
     copy .env.example .env
-    echo ! Please edit .env file and update MODEL_API_URL with your model endpoint
+    echo ! Please edit .env file and update GOOGLE_API_KEY with your API key
 )
 
 REM Run migrations
@@ -55,7 +55,7 @@ echo + Setup Complete!
 echo =========================================
 echo.
 echo Next steps:
-echo 1. Edit .env and set your MODEL_API_URL
+echo 1. Edit .env and set your GOOGLE_API_KEY
 echo 2. Run: python manage.py runserver
 echo 3. Access API at: http://localhost:8000
 echo 4. Access Admin at: http://localhost:8000/admin

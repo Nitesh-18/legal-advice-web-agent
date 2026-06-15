@@ -131,9 +131,7 @@ SIMPLE_JWT = {
     'REFRESH_TOKEN_LIFETIME': timedelta(days=30),
 }
 
-# Model API Configuration
-MODEL_API_URL = config('MODEL_API_URL', default='http://localhost:5000', cast=str)
-MODEL_API_TIMEOUT = 120  # seconds
+# AI Model Configuration
 GOOGLE_API_KEY = config('GOOGLE_API_KEY', default='', cast=str)
 
 # Cache / Redis Configuration (Fell back to In-Memory since Redis is not installed locally)
