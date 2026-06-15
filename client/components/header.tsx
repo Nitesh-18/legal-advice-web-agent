@@ -48,12 +48,7 @@ export function Header() {
             >
               How it Works
             </Link>
-            <Link
-              href="#case-explorer"
-              className="text-sm font-medium text-foreground hover:text-primary transition-colors"
-            >
-              Case Explorer
-            </Link>
+
             <Link href="#" className="text-sm font-medium text-foreground hover:text-primary transition-colors">
               Features
             </Link>
@@ -95,12 +90,7 @@ export function Header() {
             >
               How it Works
             </Link>
-            <Link
-              href="#case-explorer"
-              className="text-sm font-medium text-foreground hover:text-primary transition-colors"
-            >
-              Case Explorer
-            </Link>
+
             <Link href="#" className="text-sm font-medium text-foreground hover:text-primary transition-colors">
               Features
             </Link>

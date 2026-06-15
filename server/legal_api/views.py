@@ -11,12 +11,13 @@ from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.models import User
 from django.db import models
 import logging
+from django.core.mail import send_mail
 
-from .services import model_service, ModelAPIError
 from .services import model_service, ModelAPIError
 from .kanoon_service import kanoon_service
 from .document_service import document_service
 from .orchestrator_service import orchestrator_service
+from .tasks import process_legal_document_background, ingest_knowledge_base_document
 from .models import LegalQuery, ChatSession, ChatMessage
 from .serializers import UserSerializer, ChatSessionSerializer, ChatMessageSerializer
 
@@ -31,6 +32,45 @@ def get_client_ip(request):
     else:
         ip = request.META.get('REMOTE_ADDR')
     return ip
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def upload_knowledge_document(request):
+    """
+    Upload a document (PDF/DOCX) to the Private Enterprise Knowledge Base.
+    The document is processed into vectors by a Celery background task.
+    """
+    if 'file' not in request.FILES:
+        return Response(
+            {'success': False, 'error': 'No file uploaded'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+        
+    uploaded_file = request.FILES['file']
+    
+    # Save file temporarily
+    file_path = document_service.save_document(uploaded_file)
+    if not file_path:
+        return Response(
+            {'success': False, 'error': 'Failed to save file'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+        
+    try:
+        # Trigger Celery background task for RAG ingestion
+        ingest_knowledge_base_document.delay(file_path, request.user.id, uploaded_file.name)
+        
+        return Response({
+            'success': True,
+            'message': f'"{uploaded_file.name}" has been queued for private knowledge ingestion.',
+            'status': 'processing'
+        })
+    except Exception as e:
+        logger.error(f"Failed to queue knowledge ingestion: {e}")
+        return Response(
+            {'success': False, 'error': 'Failed to queue document processing.'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
 
 @api_view(['POST'])
@@ -142,6 +182,7 @@ def add_chat_message(request, session_id):
     role = request.data.get('role')
     content = request.data.get('content')
     state = request.data.get('state')
+    mode = request.data.get('mode', 'standard')
 
     if not content:
         return Response({'error': 'Content is required'}, status=status.HTTP_400_BAD_REQUEST)
@@ -156,7 +197,7 @@ def add_chat_message(request, session_id):
     if role == 'user':
         # Automatically generate assistant response using orchestrator
         try:
-            result = orchestrator_service.research_query(content, state)
+            result = orchestrator_service.research_query(content, state, mode)
             
             # Save assistant message
             assistant_msg = ChatMessage.objects.create(
@@ -243,7 +284,8 @@ def ask_legal_question(request):
         
         try:
             state = request.data.get('state', None)
-            result = orchestrator_service.research_query(question, state)
+            mode = request.data.get('mode', 'standard')
+            result = orchestrator_service.research_query(question, state, mode)
             
             # Log the query
             LegalQuery.objects.create(
@@ -471,14 +513,15 @@ Please provide:
 @csrf_exempt
 def generate_notice(request):
     """
-    Generate legal notice
+    Generate legal notice and optionally dispatch
     POST /api/generate-notice
-    Body: { "party_names": "...", "issue": "...", "jurisdiction": "..." }
+    Body: { "party_names": "...", "issue": "...", "jurisdiction": "...", "email_to": "..." }
     """
     try:
         party_names = request.data.get('party_names', '')
         issue = request.data.get('issue', '')
         jurisdiction = request.data.get('jurisdiction', '')
+        email_to = request.data.get('email_to', '')
         
         if not party_names or not issue:
             return Response({'error': 'party_names and issue are required'}, status=status.HTTP_400_BAD_REQUEST)
@@ -493,12 +536,44 @@ Provide a professional legal notice drafted for this scenario, complete with pla
 """
         result = model_service._make_request(prompt)
         
-        return Response({
+        response_data = {
             'success': True,
             'notice': result['content'],
             'response_time': result['response_time']
-        })
+        }
+        
+        # Simulate or Real Dispatch
+        if email_to:
+            try:
+                send_mail(
+                    subject=f"Legal Notice regarding: {issue[:50]}...",
+                    message=result['content'],
+                    from_email=None,  # Uses EMAIL_HOST_USER
+                    recipient_list=[email_to],
+                    fail_silently=False,
+                )
+                logger.info(f"Successfully shot Legal Notice to {email_to}")
+                response_data['dispatched'] = True
+                response_data['dispatch_message'] = f"Notice successfully shot to {email_to}"
+            except Exception as mail_err:
+                logger.error(f"Failed to shoot email: {mail_err}")
+                response_data['dispatched'] = False
+                response_data['dispatch_message'] = "Notice generated, but failed to shoot email. Please configure SMTP password in settings.py."
+        
+        return Response(response_data)
         
     except Exception as e:
         logger.error(f"Error generating notice: {e}")
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['POST'])
+def predictive_analytics(request):
+    """
+    Get mock predictive analytics for a case
+    POST /api/predictive-analytics/
+    """
+    case_type = request.data.get('case_type', 'Civil')
+    court = request.data.get('court', 'High Court')
+    
+    analytics = orchestrator_service.get_predictive_analytics(case_type, court)
+    return Response({'success': True, 'analytics': analytics})

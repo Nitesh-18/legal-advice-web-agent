@@ -136,19 +136,27 @@ MODEL_API_URL = config('MODEL_API_URL', default='http://localhost:5000', cast=st
 MODEL_API_TIMEOUT = 120  # seconds
 GOOGLE_API_KEY = config('GOOGLE_API_KEY', default='', cast=str)
 
-# Cache / Redis Configuration
+# Cache / Redis Configuration (Fell back to In-Memory since Redis is not installed locally)
 CACHES = {
     "default": {
-        "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": "redis://127.0.0.1:6379/1",
-        "OPTIONS": {
-            "CLIENT_CLASS": "django_redis.client.DefaultClient",
-        }
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "unique-snowflake",
     }
 }
 
 # Celery Configuration
+# We use EAGER mode to execute tasks synchronously locally since Redis might not be installed
+CELERY_TASK_ALWAYS_EAGER = True
 CELERY_BROKER_URL = 'redis://127.0.0.1:6379/0'
 CELERY_RESULT_BACKEND = 'redis://127.0.0.1:6379/0'
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
+
+# Email Configuration (SMTP)
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+# TODO: To actually shoot emails to real recipients, add your App Password here:
+EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='niteshranjankar5@gmail.com', cast=str)
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='', cast=str)

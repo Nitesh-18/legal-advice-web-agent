@@ -54,14 +54,14 @@ class KanoonService:
                 'summary': f"A landmark judgment discussing the principles of {query}. The court held that the relevant laws apply strictly.",
                 'court': "Supreme Court of India",
                 'date': "12 May 2018",
-                'link': "https://indiankanoon.org/doc/mock123/"
+                'link': "https://indiankanoon.org/doc/1766147/" # Maneka Gandhi doc ID as fallback
             },
             {
                 'title': f"Union of India vs. Associated Corporations ({query[:10]}...)",
                 'summary': f"The high court deliberated on the issues concerning {query}. It was established that due process must be followed.",
                 'court': "Delhi High Court",
                 'date': "04 Oct 2021",
-                'link': "https://indiankanoon.org/doc/mock456/"
+                'link': "https://indiankanoon.org/doc/257876/" # Kesavananda Bharati doc ID as fallback
             }
         ]
 

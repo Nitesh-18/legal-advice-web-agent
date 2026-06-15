@@ -42,11 +42,7 @@ export function Footer() {
                   How it Works
                 </Link>
               </li>
-              <li>
-                <Link href="#case-explorer" className="hover:opacity-80 transition-opacity">
-                  Case Explorer
-                </Link>
-              </li>
+
               <li>
                 <Link href="#" className="hover:opacity-80 transition-opacity">
                   Pricing

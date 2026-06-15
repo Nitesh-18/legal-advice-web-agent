@@ -15,6 +15,7 @@ export interface Message {
   loading?: boolean;
   cases?: CaseData[];
   state?: string;
+  mode?: string;
 }
 
 export interface CaseAnalysisResponse {
@@ -98,10 +99,10 @@ export async function analyzeCase(caseText: string): Promise<CaseAnalysisRespons
   });
 }
 
-export async function askLegalQuestion(question: string, state?: string): Promise<LegalQueryResponse> {
+export async function askLegalQuestion(question: string, state?: string, mode: string = 'standard'): Promise<LegalQueryResponse> {
   return fetchAPI<LegalQueryResponse>('/api/ask-legal-question/', {
     method: 'POST',
-    body: JSON.stringify({ question, state }),
+    body: JSON.stringify({ question, state, mode }),
   });
 }
 
@@ -110,7 +111,7 @@ export async function analyzeDocument(file: File): Promise<DocumentAnalysisRespo
   formData.append('file', file);
   
   try {
-    const response = await fetch(`${API_BASE_URL}/api/analyze-document/`, {
+    const response = await fetch(`${API_BASE_URL}/analyze-document/`, {
       method: 'POST',
       body: formData,
     });
@@ -127,10 +128,52 @@ export async function analyzeDocument(file: File): Promise<DocumentAnalysisRespo
   }
 }
 
-export async function generateNotice(partyNames: string, issue: string, jurisdiction: string): Promise<NoticeGenerationResponse> {
+export const uploadKnowledgeBaseDocument = async (file: File): Promise<{success: boolean, message: string, status: string}> => {
+  const formData = new FormData()
+  formData.append('file', file)
+  
+  const token = getAuthToken();
+  if (!token) {
+    throw new APIError(401, 'You must be logged in to upload to the Private Knowledge Base')
+  }
+  
+  const headers: HeadersInit = {
+    'Authorization': `Bearer ${token}`
+  }
+
+  const response = await fetch(`${API_BASE_URL}/upload-knowledge/`, {
+    method: 'POST',
+    headers,
+    body: formData,
+  })
+
+  if (!response.ok) {
+    const error = await response.json()
+    throw new APIError(response.status, error.error || 'Failed to upload document')
+  }
+
+  return response.json()
+};
+
+export interface NoticeGenerationResponse {
+  success: boolean;
+  notice: string;
+  response_time: number;
+  dispatched?: boolean;
+  dispatch_message?: string;
+}
+
+export async function generateNotice(partyNames: string, issue: string, jurisdiction: string, emailTo?: string): Promise<NoticeGenerationResponse> {
   return fetchAPI<NoticeGenerationResponse>('/api/generate-notice/', {
     method: 'POST',
-    body: JSON.stringify({ party_names: partyNames, issue, jurisdiction }),
+    body: JSON.stringify({ party_names: partyNames, issue, jurisdiction, email_to: emailTo }),
+  });
+}
+
+export async function getPredictiveAnalytics(caseType: string, court: string) {
+  return fetchAPI<any>('/api/predictive-analytics/', {
+    method: 'POST',
+    body: JSON.stringify({ case_type: caseType, court }),
   });
 }
 
@@ -177,10 +220,10 @@ export async function deleteRemoteSession(sessionId: number) {
   });
 }
 
-export async function addMessageToRemoteSession(sessionId: number, content: string, state?: string) {
+export async function addMessageToRemoteSession(sessionId: number, content: string, state?: string, mode?: string) {
   return fetchAPI<any>(`/api/chat/sessions/${sessionId}/messages/`, {
     method: 'POST',
-    body: JSON.stringify({ role: 'user', content, state }),
+    body: JSON.stringify({ role: 'user', content, state, mode }),
   });
 }
 

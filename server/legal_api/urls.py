@@ -36,4 +36,6 @@ urlpatterns = [
     path('case-search/', views.case_search, name='case_search'),
     path('analyze-document/', views.analyze_document, name='analyze_document'),
     path('generate-notice/', views.generate_notice, name='generate_notice'),
+    path('predictive-analytics/', views.predictive_analytics, name='predictive_analytics'),
+    path('upload-knowledge/', views.upload_knowledge_document, name='upload_knowledge'),
 ]

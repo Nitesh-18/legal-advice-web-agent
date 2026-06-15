@@ -4,10 +4,11 @@ import { useEffect, useState, useRef, Suspense } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { analyzeCase, askLegalQuestion, analyzeDocument, Message, APIError } from "@/lib/api"
-import { Send, Loader2, AlertCircle, ArrowLeft, Bot, User, Paperclip, X, FileText } from "lucide-react"
+import { analyzeCase, askLegalQuestion, analyzeDocument, Message, APIError, getPredictiveAnalytics, generateNotice } from "@/lib/api"
+import { Send, Loader2, AlertCircle, ArrowLeft, Bot, User, Paperclip, X, FileText, Swords, BarChart, Mail } from "lucide-react"
 import { MarkdownRenderer } from "@/components/MarkdownRenderer"
 import { ChatSidebar } from "@/components/ChatSidebar"
+import { VoiceInput } from "@/components/VoiceInput"
 import { 
   ChatSession, 
   getChatSession, 
@@ -25,6 +26,12 @@ function ChatContent() {
   const [isLoading, setIsLoading] = useState(false)
   const [currentSession, setCurrentSession] = useState<ChatSession | null>(null)
   const [isInitializing, setIsInitializing] = useState(false)
+  const [isOpposingMode, setIsOpposingMode] = useState(false)
+  const [analyticsData, setAnalyticsData] = useState<any>(null)
+  const [showNoticeModal, setShowNoticeModal] = useState(false)
+  const [noticeForm, setNoticeForm] = useState({ partyNames: '', issue: '', jurisdiction: '', emailTo: '' })
+  const [noticeStatus, setNoticeStatus] = useState("")
+  
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const hasInitialized = useRef(false)
 
@@ -179,7 +186,7 @@ function ChatContent() {
   }, [searchParams, currentSession, router])
 
   const handleSendMessage = async () => {
-    if (!inputValue.trim() || isLoading || !currentSession) return
+    if ((!inputValue.trim() && !selectedFile) || isLoading || isInitializing || !currentSession) return
 
     const userMessage: Message = {
       id: `msg_${Date.now()}`,
@@ -212,13 +219,13 @@ function ChatContent() {
         let finalAnswer = `**Document Analysis:**\n${docResponse.analysis}`;
         
         if (currentInput.trim()) {
-           const qResponse = await askLegalQuestion(`Based on the document context: \n\n${currentInput}`);
+           const qResponse = await askLegalQuestion(`Based on the document context: \n\n${currentInput}`, undefined, isOpposingMode ? 'opposing' : 'standard');
            finalAnswer += `\n\n**Response to Question:**\n${qResponse.answer}`;
            
            setMessages(prev => 
             prev.map(msg => 
               msg.loading 
-                ? { ...msg, content: finalAnswer, cases: qResponse.cases, state: qResponse.state, loading: false }
+                ? { ...msg, content: finalAnswer, cases: qResponse.cases, state: qResponse.state, loading: false, mode: isOpposingMode ? 'opposing' : 'standard' }
                 : msg
             )
           )
@@ -232,12 +239,12 @@ function ChatContent() {
           )
         }
       } else {
-        const response = await askLegalQuestion(currentInput)
+        const response = await askLegalQuestion(currentInput, undefined, isOpposingMode ? 'opposing' : 'standard')
         
         setMessages(prev => 
           prev.map(msg => 
             msg.loading 
-              ? { ...msg, content: response.answer, cases: response.cases, state: response.state, loading: false }
+              ? { ...msg, content: response.answer, cases: response.cases, state: response.state, loading: false, mode: isOpposingMode ? 'opposing' : 'standard' }
               : msg
           )
         )
@@ -272,8 +279,45 @@ function ChatContent() {
   }
 
   const handleNewChat = () => {
-    hasInitialized.current = false
-    router.push('/')
+    const newSession = createNewSession("New Legal Query");
+    setCurrentSession(newSession);
+    setMessages([]);
+    router.push(`/chat?session=${newSession.id}`);
+  }
+
+  const handleFetchAnalytics = async () => {
+    if (analyticsData) return; // Prevent re-fetching if already open
+    try {
+      const res = await getPredictiveAnalytics("General", "High Court");
+      if (res.success) {
+        setAnalyticsData(res.analytics);
+      }
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  const handleSendNotice = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setNoticeStatus("Generating & dispatching notice...");
+    try {
+      const res = await generateNotice(noticeForm.partyNames, noticeForm.issue, noticeForm.jurisdiction, noticeForm.emailTo);
+      if (res.success) {
+        setNoticeStatus(res.dispatched ? `✅ ${res.dispatch_message}` : "✅ Notice generated successfully");
+        // Add it to the chat!
+        setMessages(prev => [...prev, {
+          id: `msg_${Date.now()}`,
+          role: "assistant",
+          content: `**Automated Legal Notice Generated:**\n\n${res.notice}\n\n*Status: ${res.dispatch_message || 'Generated'}*`,
+          timestamp: new Date()
+        }])
+        setTimeout(() => setShowNoticeModal(false), 2000);
+      } else {
+        setNoticeStatus("❌ Failed to generate notice");
+      }
+    } catch (e) {
+      setNoticeStatus("❌ Error generating notice");
+    }
   }
 
   // Debug render
@@ -315,8 +359,17 @@ function ChatContent() {
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <div className="flex items-center gap-1">
+              <div className="flex items-center gap-3">
+                <Button 
+                  variant={isOpposingMode ? "destructive" : "outline"} 
+                  size="sm" 
+                  onClick={() => setIsOpposingMode(!isOpposingMode)}
+                  className="transition-all"
+                >
+                  <Swords className="h-4 w-4 mr-2" />
+                  {isOpposingMode ? "Opposing Mode ON" : "Opposing Mode"}
+                </Button>
+                <div className="flex items-center gap-1 text-sm text-muted-foreground">
                   <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
                   <span>AI Online</span>
                 </div>
@@ -353,7 +406,9 @@ function ChatContent() {
                       className={`max-w-[85%] overflow-hidden transition-all duration-300 animate-in fade-in slide-in-from-bottom-4 ${
                         message.role === "user"
                           ? "bg-gradient-to-tr from-primary to-primary/90 text-primary-foreground shadow-lg shadow-primary/20 rounded-2xl rounded-tr-sm"
-                          : "bg-card/80 backdrop-blur-xl border border-border/60 shadow-md rounded-2xl rounded-tl-sm"
+                          : message.mode === 'opposing'
+                            ? "bg-red-50/80 dark:bg-red-950/30 backdrop-blur-xl border border-red-200 dark:border-red-900/50 shadow-md rounded-2xl rounded-tl-sm text-foreground"
+                            : "bg-card/80 backdrop-blur-xl border border-border/60 shadow-md rounded-2xl rounded-tl-sm text-foreground"
                       }`}
                     >
                       <div className="p-4">
@@ -463,6 +518,12 @@ function ChatContent() {
                 />
                 <Paperclip className="h-5 w-5 text-muted-foreground group-hover:text-foreground transition-colors" />
               </label>
+              
+              <VoiceInput 
+                disabled={isLoading || isInitializing} 
+                onTranscript={(text) => setInputValue(prev => prev + text)} 
+              />
+              
               <textarea
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
@@ -514,11 +575,92 @@ function ChatContent() {
                 >
                   Required documents
                 </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="text-xs border-primary/20 text-primary hover:bg-primary/10"
+                  onClick={handleFetchAnalytics}
+                >
+                  <BarChart className="h-3 w-3 mr-1" /> View Analytics
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="text-xs border-primary/20 text-primary hover:bg-primary/10"
+                  onClick={() => setShowNoticeModal(true)}
+                >
+                  <Mail className="h-3 w-3 mr-1" /> Draft & Send Notice
+                </Button>
+              </div>
+            )}
+
+            {analyticsData && (
+              <div className="mt-4 p-4 bg-card border border-border rounded-xl shadow-sm animate-in fade-in slide-in-from-bottom-4">
+                <div className="flex justify-between items-center mb-3">
+                  <h4 className="font-semibold flex items-center gap-2"><BarChart className="h-4 w-4 text-primary" /> Predictive Case Analytics</h4>
+                  <Button variant="ghost" size="sm" onClick={() => setAnalyticsData(null)}><X className="h-4 w-4"/></Button>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                  <div className="bg-primary/5 p-3 rounded-lg">
+                    <p className="text-muted-foreground text-xs">Success Probability</p>
+                    <p className="text-lg font-bold text-primary">{analyticsData.success_rate_percent}%</p>
+                  </div>
+                  <div className="bg-primary/5 p-3 rounded-lg">
+                    <p className="text-muted-foreground text-xs">Avg. Duration</p>
+                    <p className="text-lg font-bold">{analyticsData.average_duration_months} Months</p>
+                  </div>
+                  <div className="bg-primary/5 p-3 rounded-lg">
+                    <p className="text-muted-foreground text-xs">Judge Tendency</p>
+                    <p className="text-sm font-semibold truncate" title={analyticsData.judge_tendency}>{analyticsData.judge_tendency}</p>
+                  </div>
+                  <div className="bg-primary/5 p-3 rounded-lg">
+                    <p className="text-muted-foreground text-xs">Historical Cases</p>
+                    <p className="text-lg font-bold">{analyticsData.historical_similar_cases}</p>
+                  </div>
+                </div>
               </div>
             )}
           </div>
         </div>
       </div>
+
+      {showNoticeModal && (
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <Card className="w-full max-w-lg shadow-2xl">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xl font-semibold flex items-center gap-2"><Mail className="h-5 w-5 text-primary" /> Draft Legal Notice</h3>
+                <Button variant="ghost" size="icon" onClick={() => setShowNoticeModal(false)}><X className="h-5 w-5" /></Button>
+              </div>
+              <form onSubmit={handleSendNotice} className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium mb-1 block">Parties Involved</label>
+                  <input required className="w-full border rounded-lg p-2 text-sm" placeholder="e.g. Ramesh vs Suresh" value={noticeForm.partyNames} onChange={e => setNoticeForm({...noticeForm, partyNames: e.target.value})} />
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-1 block">Issue Description</label>
+                  <textarea required className="w-full border rounded-lg p-2 text-sm h-20 resize-none" placeholder="Briefly describe the grievance..." value={noticeForm.issue} onChange={e => setNoticeForm({...noticeForm, issue: e.target.value})} />
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-1 block">Jurisdiction (State/City)</label>
+                  <input required className="w-full border rounded-lg p-2 text-sm" placeholder="e.g. Delhi" value={noticeForm.jurisdiction} onChange={e => setNoticeForm({...noticeForm, jurisdiction: e.target.value})} />
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-1 block">Recipient Email (Dispatch)</label>
+                  <input type="email" required className="w-full border rounded-lg p-2 text-sm" placeholder="tenant@example.com" value={noticeForm.emailTo} onChange={e => setNoticeForm({...noticeForm, emailTo: e.target.value})} />
+                </div>
+                
+                {noticeStatus && <p className="text-sm font-medium text-primary">{noticeStatus}</p>}
+                
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button type="button" variant="outline" onClick={() => setShowNoticeModal(false)}>Cancel</Button>
+                  <Button type="submit">Draft & Dispatch</Button>
+                </div>
+              </form>
+            </div>
+          </Card>
+        </div>
+      )}
     </div>
   )
 }
