@@ -46,10 +46,7 @@ export function Header() {
               className="text-sm font-medium text-foreground hover:text-primary transition-colors"
             >
               Firm Directory
-            </Link>
-            <Link href="/admin" className="text-sm font-medium text-foreground hover:text-primary transition-colors">
-              Admin
-            </Link>
+            </Link>          
           </nav>
 
           <div className="flex items-center gap-4">

@@ -42,12 +42,6 @@ export function Footer() {
                   How it Works
                 </Link>
               </li>
-
-              <li>
-                <Link href="#" className="hover:opacity-80 transition-opacity">
-                  Pricing
-                </Link>
-              </li>
             </ul>
           </div>
 
