@@ -231,26 +231,66 @@ function ChatContent() {
 
     try {
       if (currentFile) {
-        const docResponse = await analyzeDocument(currentFile);
-        
-        let finalAnswer = `**Document Analysis:**\n${docResponse.analysis}`;
-        
-        if (currentInput.trim()) {
-           const qResponse = await askLegalQuestion(`Based on the document context: \n\n${currentInput}`, undefined, isOpposingMode ? 'opposing' : 'standard');
-           finalAnswer += `\n\n**Response to Question:**\n${qResponse.answer}`;
-           
-           setMessages(prev => 
-            prev.map(msg => 
-              msg.loading 
-                ? { ...msg, content: finalAnswer, cases: qResponse.cases, state: qResponse.state, loading: false, mode: isOpposingMode ? 'opposing' : 'standard' }
+        let docAnalysis: string | null = null;
+        let docWarning: string | null = null;
+
+        try {
+          const docResponse = await analyzeDocument(currentFile);
+          if (docResponse.success) {
+            docAnalysis = docResponse.analysis;
+          } else {
+            // Backend returned partial / extraction failure
+            docWarning = (docResponse as any).error || 'Could not extract text from the attached document.';
+          }
+        } catch (docError) {
+          console.warn("⚠️ Document analysis failed, falling back to text query:", docError);
+          docWarning = docError instanceof APIError
+            ? docError.message
+            : 'Could not extract text from the attached document.';
+        }
+
+        if (docAnalysis) {
+          // Document parsed successfully
+          let finalAnswer = `**Document Analysis:**\n${docAnalysis}`;
+
+          if (currentInput.trim()) {
+            const qResponse = await askLegalQuestion(`Based on the document context: \n\n${currentInput}`, undefined, isOpposingMode ? 'opposing' : 'standard');
+            finalAnswer += `\n\n**Response to Question:**\n${qResponse.answer}`;
+
+            setMessages(prev =>
+              prev.map(msg =>
+                msg.loading
+                  ? { ...msg, content: finalAnswer, cases: qResponse.cases, state: qResponse.state, loading: false, mode: isOpposingMode ? 'opposing' : 'standard' }
+                  : msg
+              )
+            )
+          } else {
+            setMessages(prev =>
+              prev.map(msg =>
+                msg.loading
+                  ? { ...msg, content: finalAnswer, loading: false }
+                  : msg
+              )
+            )
+          }
+        } else if (currentInput.trim()) {
+          // Document failed but user typed a text query — fall back to text-only
+          const fallbackNotice = `> ⚠️ *${docWarning} Proceeding with your text query instead.*\n\n`;
+          const response = await askLegalQuestion(currentInput, undefined, isOpposingMode ? 'opposing' : 'standard');
+
+          setMessages(prev =>
+            prev.map(msg =>
+              msg.loading
+                ? { ...msg, content: fallbackNotice + response.answer, cases: response.cases, state: response.state, loading: false, mode: isOpposingMode ? 'opposing' : 'standard' }
                 : msg
             )
           )
         } else {
-          setMessages(prev => 
-            prev.map(msg => 
-              msg.loading 
-                ? { ...msg, content: finalAnswer, loading: false }
+          // Document failed AND no text query
+          setMessages(prev =>
+            prev.map(msg =>
+              msg.loading
+                ? { ...msg, content: `⚠️ **Could not process document:** ${docWarning}\n\nPlease try a different file format (PDF, DOCX) or type your legal question directly.`, loading: false }
                 : msg
             )
           )

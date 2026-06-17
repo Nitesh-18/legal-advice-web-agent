@@ -525,25 +525,42 @@ def analyze_document(request):
             for chunk in uploaded_file.chunks():
                 temp_file.write(chunk)
 
-        extracted_text = document_parser.parse_document(temp_path, original_filename)
         question = request.data.get('question', '').strip()
-        _query = question if question else extracted_text[:500]
+        extracted_text = None
+        extraction_warning = None
 
-        result = model_service.analyze_case(extracted_text)
+        try:
+            extracted_text = document_parser.parse_document(temp_path, original_filename)
+        except (ValueError, Exception) as parse_exc:
+            logger.warning(f"Document text extraction failed for {original_filename}: {parse_exc}")
+            extraction_warning = str(parse_exc)
 
-        return Response({
-            'success': True,
-            'filename': original_filename,
-            'extracted_text_preview': extracted_text[:500],
-            'analysis': result['analysis'],
-            'response_time': time.time() - start_time,
-        })
-    except ValueError as exc:
-        logger.error(f"Document analysis validation error: {exc}")
-        return Response({'success': False, 'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        if extracted_text:
+            # Document parsed successfully — analyze document text
+            result = model_service.analyze_case(extracted_text)
+            return Response({
+                'success': True,
+                'filename': original_filename,
+                'extracted_text_preview': extracted_text[:500],
+                'analysis': result['analysis'],
+                'response_time': time.time() - start_time,
+            })
+        else:
+            # Document extraction failed — return partial response so frontend can fallback
+            return Response({
+                'success': False,
+                'partial': True,
+                'filename': original_filename,
+                'error': extraction_warning or 'Could not extract text from document',
+                'response_time': time.time() - start_time,
+            })
+
     except Exception as exc:
-        logger.error(f"Failed to parse document: {exc}")
-        return Response({'success': False, 'error': f'Failed to parse document: {exc}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        logger.error(f"Failed to process document: {exc}")
+        return Response({
+            'success': False,
+            'error': f'Failed to process document: {exc}',
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     finally:
         if os.path.exists(temp_path):
             try:

@@ -1,4 +1,4 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 
 export function getAuthToken() {
   if (typeof window !== 'undefined') {
@@ -93,14 +93,14 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> 
 }
 
 export async function analyzeCase(caseText: string): Promise<CaseAnalysisResponse> {
-  return fetchAPI<CaseAnalysisResponse>('/api/analyze-case/', {
+  return fetchAPI<CaseAnalysisResponse>('/analyze-case/', {
     method: 'POST',
     body: JSON.stringify({ case_text: caseText }),
   });
 }
 
 export async function askLegalQuestion(question: string, state?: string, mode: string = 'standard'): Promise<LegalQueryResponse> {
-  return fetchAPI<LegalQueryResponse>('/api/ask-legal-question/', {
+  return fetchAPI<LegalQueryResponse>('/ask-legal-question/', {
     method: 'POST',
     body: JSON.stringify({ question, state, mode }),
   });
@@ -111,7 +111,7 @@ export async function analyzeDocument(file: File): Promise<DocumentAnalysisRespo
   formData.append('document', file);
   
   try {
-    const response = await fetch(`${API_BASE_URL}/api/analyze-document/`, {
+    const response = await fetch(`${API_BASE_URL}/analyze-document/`, {
       method: 'POST',
       body: formData,
     });
@@ -141,7 +141,7 @@ export const uploadKnowledgeBaseDocument = async (file: File): Promise<{success:
     'Authorization': `Bearer ${token}`
   }
 
-  const response = await fetch(`${API_BASE_URL}/api/upload-knowledge/`, {
+  const response = await fetch(`${API_BASE_URL}/upload-knowledge/`, {
     method: 'POST',
     headers,
     body: formData,
@@ -165,14 +165,14 @@ export interface NoticeGenerationResponse {
 }
 
 export async function generateNotice(partyNames: string, issue: string, jurisdiction: string, emailTo?: string): Promise<NoticeGenerationResponse> {
-  return fetchAPI<NoticeGenerationResponse>('/api/generate-notice/', {
+  return fetchAPI<NoticeGenerationResponse>('/generate-notice/', {
     method: 'POST',
     body: JSON.stringify({ party_names: partyNames, issue, jurisdiction, email_to: emailTo }),
   });
 }
 
 export async function getPredictiveAnalytics(caseType: string, court: string) {
-  return fetchAPI<any>('/api/predictive-analytics/', {
+  return fetchAPI<any>('/predictive-analytics/', {
     method: 'POST',
     body: JSON.stringify({ case_type: caseType, court }),
   });
@@ -180,7 +180,7 @@ export async function getPredictiveAnalytics(caseType: string, court: string) {
 
 // Authentication API
 export async function login(username: string, password: string) {
-  const data = await fetchAPI<any>('/api/auth/login/', {
+  const data = await fetchAPI<any>('/auth/login/', {
     method: 'POST',
     body: JSON.stringify({ username, password }),
   });
@@ -192,7 +192,7 @@ export async function login(username: string, password: string) {
 }
 
 export async function register(username: string, email: string, password: string) {
-  return fetchAPI<any>('/api/auth/register/', {
+  return fetchAPI<any>('/auth/register/', {
     method: 'POST',
     body: JSON.stringify({ username, email, password }),
   });
@@ -205,31 +205,31 @@ export function logout() {
 
 // Remote Chat API
 export async function fetchRemoteSessions() {
-  return fetchAPI<any[]>('/api/chat/sessions/');
+  return fetchAPI<any[]>('/chat/sessions/');
 }
 
 export async function createRemoteSession(title: string) {
-  return fetchAPI<any>('/api/chat/sessions/', {
+  return fetchAPI<any>('/chat/sessions/', {
     method: 'POST',
     body: JSON.stringify({ title }),
   });
 }
 
 export async function deleteRemoteSession(sessionId: number) {
-  return fetchAPI<void>(`/api/chat/sessions/${sessionId}/`, {
+  return fetchAPI<void>(`/chat/sessions/${sessionId}/`, {
     method: 'DELETE',
   });
 }
 
 export async function addMessageToRemoteSession(sessionId: number, content: string, state?: string, mode?: string) {
-  return fetchAPI<any>(`/api/chat/sessions/${sessionId}/messages/`, {
+  return fetchAPI<any>(`/chat/sessions/${sessionId}/messages/`, {
     method: 'POST',
     body: JSON.stringify({ role: 'user', content, state, mode }),
   });
 }
 
 export async function syncRemoteSession(sessionData: any) {
-  return fetchAPI<any>('/api/chat/sessions/sync/', {
+  return fetchAPI<any>('/chat/sessions/sync/', {
     method: 'POST',
     body: JSON.stringify(sessionData),
   });
