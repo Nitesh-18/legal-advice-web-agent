@@ -4,9 +4,9 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area" 
-import { Cloud, HardDrive, Upload, Loader2, Library, CheckCircle, MessageSquare, Trash2, Plus, ChevronLeft, ChevronRight, Clock } from "lucide-react"
+import { Cloud, HardDrive, MessageSquare, Trash2, Plus, ChevronLeft, ChevronRight, Clock } from "lucide-react"
 import { ChatSession, getAllChatSessions, deleteChatSession } from "@/lib/chatStorage"
-import { fetchRemoteSessions, deleteRemoteSession, getAuthToken, uploadKnowledgeBaseDocument } from "@/lib/api"
+import { fetchRemoteSessions, deleteRemoteSession, getAuthToken } from "@/lib/api"
 import { useRouter } from "next/navigation"
 
 interface ChatSidebarProps {
@@ -18,8 +18,6 @@ export function ChatSidebar({ currentSessionId, onNewChat }: ChatSidebarProps) {
   const [sessions, setSessions] = useState<any[]>([])
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [isAuth, setIsAuth] = useState(false)
-  const [uploading, setUploading] = useState(false)
-  const [uploadStatus, setUploadStatus] = useState("")
   const router = useRouter()
 
   useEffect(() => {
@@ -105,29 +103,6 @@ export function ChatSidebar({ currentSessionId, onNewChat }: ChatSidebarProps) {
       return `${Math.floor(diffInHours / 24)} days ago`
     } else {
       return date.toLocaleDateString()
-    }
-  }
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    
-    setUploading(true);
-    setUploadStatus("Uploading...");
-    
-    try {
-      const res = await uploadKnowledgeBaseDocument(file);
-      if (res.success) {
-        setUploadStatus("Ingested to Enterprise DB");
-        setTimeout(() => setUploadStatus(""), 4000);
-      }
-    } catch (err: any) {
-      setUploadStatus(err.message || "Upload failed");
-      setTimeout(() => setUploadStatus(""), 4000);
-    } finally {
-      setUploading(false);
-      // reset input
-      e.target.value = '';
     }
   }
 
@@ -234,27 +209,6 @@ export function ChatSidebar({ currentSessionId, onNewChat }: ChatSidebarProps) {
 
       {/* Footer */}
       <div className="p-4 border-t flex flex-col gap-3">
-        {isAuth && (
-          <div className="bg-primary/5 p-3 rounded-xl border border-primary/10">
-            <div className="flex items-center gap-2 mb-2 text-sm font-semibold text-primary">
-              <Library className="h-4 w-4" /> Enterprise RAG
-            </div>
-            <p className="text-[10px] text-muted-foreground mb-3 leading-tight">
-              Upload private firm documents (PDF/DOCX) to securely index them in your custom vector database.
-            </p>
-            <label className={`flex items-center justify-center gap-2 w-full text-xs font-medium py-2 rounded-md transition-all cursor-pointer ${uploading ? 'bg-muted text-muted-foreground cursor-not-allowed' : 'bg-primary/10 hover:bg-primary/20 text-primary'}`}>
-              <input type="file" className="hidden" accept=".pdf,.docx,.txt" onChange={handleFileUpload} disabled={uploading} />
-              {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
-              {uploading ? "Ingesting..." : "Upload to Knowledge Base"}
-            </label>
-            {uploadStatus && (
-              <div className="mt-2 text-[10px] flex items-center gap-1 font-medium text-green-600 dark:text-green-400">
-                <CheckCircle className="h-3 w-3" /> {uploadStatus}
-              </div>
-            )}
-          </div>
-        )}
-        
         <div className="text-xs text-muted-foreground mt-2">
           {isAuth ? (
             <div className="flex items-center gap-2 text-primary">

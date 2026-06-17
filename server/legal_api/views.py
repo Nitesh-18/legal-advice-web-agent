@@ -12,16 +12,24 @@ from django.contrib.auth.models import User
 from django.db import models
 import logging
 from django.core.mail import send_mail
+import os
+import time
 
 from .services import model_service, ModelAPIError
 from .kanoon_service import kanoon_service
 from .document_service import document_service
 from .orchestrator_service import orchestrator_service
+from . import document_parser, rag_pipeline
 from .tasks import process_legal_document_background, ingest_knowledge_base_document
 from .models import LegalQuery, ChatSession, ChatMessage
 from .serializers import UserSerializer, ChatSessionSerializer, ChatMessageSerializer
 
 logger = logging.getLogger(__name__)
+
+
+GENERIC_AI_ERROR_MESSAGE = (
+    "Our legal analysis service is temporarily unavailable. Please try again later."
+)
 
 
 def get_client_ip(request):
@@ -122,7 +130,7 @@ def analyze_case(request):
             )
             
             return Response(
-                {'error': str(e)},
+                {'error': GENERIC_AI_ERROR_MESSAGE},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE
             )
     
@@ -316,7 +324,7 @@ def ask_legal_question(request):
             )
             
             return Response(
-                {'error': str(e)},
+                {'error': GENERIC_AI_ERROR_MESSAGE},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE
             )
     
@@ -376,7 +384,7 @@ def explain_case_reasoning(request):
             )
             
             return Response(
-                {'error': str(e)},
+                {'error': GENERIC_AI_ERROR_MESSAGE},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE
             )
     
@@ -454,6 +462,31 @@ def query_stats(request):
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
+
+@api_view(['GET'])
+def rag_stats(request):
+    try:
+        collection = rag_pipeline.get_collection()
+        count = collection.count()
+        return Response({
+            'status': 'ready' if count > 0 else 'empty',
+            'total_documents_indexed': count,
+            'collection_name': 'indian_legal_cases',
+            'embedding_model': 'text-embedding-004',
+            'dataset_source': 'viber1/indian-law-dataset (HuggingFace)',
+            'dataset_size': '24,607 Q&A pairs covering Indian Constitution, IPC, CrPC, CPC, writs, bail, FIR, judgments'
+        })
+    except Exception as e:
+        logger.error(f"RAG stats error: {e}")
+        return Response({
+            'status': 'empty',
+            'total_documents_indexed': 0,
+            'collection_name': 'indian_legal_cases',
+            'embedding_model': 'text-embedding-004',
+            'dataset_source': 'viber1/indian-law-dataset (HuggingFace)',
+            'dataset_size': '24,607 Q&A pairs covering Indian Constitution, IPC, CrPC, CPC, writs, bail, FIR, judgments'
+        })
+
 @api_view(['GET'])
 def case_search(request):
     """
@@ -476,38 +509,47 @@ def case_search(request):
 @parser_classes([MultiPartParser, FormParser])
 def analyze_document(request):
     """
-    Upload and analyze document
-    POST /api/analyze-document
+    Analyze an uploaded document using the legal case analysis flow.
+    POST /api/analyze-document/
     """
-    if 'file' not in request.FILES:
-        return Response({'error': 'No file uploaded'}, status=status.HTTP_400_BAD_REQUEST)
-        
-    file_obj = request.FILES['file']
-    
-    try:
-        text = document_service.extract_text_from_file(file_obj, file_obj.name)
-        
-        # Send to Gemini for clause extraction, risk analysis, summary
-        prompt = f"""Analyze the following legal document text:
-        
-{text[:15000]}  # limit text length for safety
+    if 'document' not in request.FILES:
+        return Response({'success': False, 'error': 'No document file provided'}, status=status.HTTP_400_BAD_REQUEST)
 
-Please provide:
-1. Summary of the document
-2. Key Clauses Extraction
-3. Risk Analysis
-"""
-        result = model_service._make_request(prompt)
-        
+    uploaded_file = request.FILES['document']
+    original_filename = os.path.basename(uploaded_file.name)
+    temp_path = os.path.join('/tmp', original_filename)
+    start_time = time.time()
+
+    try:
+        with open(temp_path, 'wb') as temp_file:
+            for chunk in uploaded_file.chunks():
+                temp_file.write(chunk)
+
+        extracted_text = document_parser.parse_document(temp_path, original_filename)
+        question = request.data.get('question', '').strip()
+        _query = question if question else extracted_text[:500]
+
+        result = model_service.analyze_case(extracted_text)
+
         return Response({
             'success': True,
-            'analysis': result['content'],
-            'response_time': result['response_time']
+            'filename': original_filename,
+            'extracted_text_preview': extracted_text[:500],
+            'analysis': result['analysis'],
+            'response_time': time.time() - start_time,
         })
-        
-    except Exception as e:
-        logger.error(f"Error analyzing document: {e}")
-        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    except ValueError as exc:
+        logger.error(f"Document analysis validation error: {exc}")
+        return Response({'success': False, 'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as exc:
+        logger.error(f"Failed to parse document: {exc}")
+        return Response({'success': False, 'error': f'Failed to parse document: {exc}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    finally:
+        if os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except OSError:
+                logger.warning(f"Could not remove temporary file: {temp_path}")
 
 @api_view(['POST'])
 @csrf_exempt

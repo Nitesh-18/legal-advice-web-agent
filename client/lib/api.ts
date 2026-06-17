@@ -108,10 +108,10 @@ export async function askLegalQuestion(question: string, state?: string, mode: s
 
 export async function analyzeDocument(file: File): Promise<DocumentAnalysisResponse> {
   const formData = new FormData();
-  formData.append('file', file);
+  formData.append('document', file);
   
   try {
-    const response = await fetch(`${API_BASE_URL}/analyze-document/`, {
+    const response = await fetch(`${API_BASE_URL}/api/analyze-document/`, {
       method: 'POST',
       body: formData,
     });
@@ -141,11 +141,12 @@ export const uploadKnowledgeBaseDocument = async (file: File): Promise<{success:
     'Authorization': `Bearer ${token}`
   }
 
-  const response = await fetch(`${API_BASE_URL}/upload-knowledge/`, {
+  const response = await fetch(`${API_BASE_URL}/api/upload-knowledge/`, {
     method: 'POST',
     headers,
     body: formData,
   })
+  
 
   if (!response.ok) {
     const error = await response.json()

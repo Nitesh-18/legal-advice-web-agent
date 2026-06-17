@@ -1,0 +1,6 @@
+chroma_db/
+/tmp/*.pdf
+/tmp/*.docx
+/tmp/*.txt
+/tmp/*.png
+/tmp/*.jpg

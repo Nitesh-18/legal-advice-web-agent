@@ -182,11 +182,28 @@ function ChatContent() {
       
       // Update URL with session ID
       router.replace(`/chat?session=${newSession.id}`, { scroll: false })
+    } else if (!currentSession) {
+      // No session provided in URL and no case param — create a fresh session so user can start typing
+      console.log("🆕 Creating new empty chat session")
+      const fresh = createNewSession("New Legal Query")
+      setCurrentSession(fresh)
+      setMessages([])
+      saveChatSession(fresh)
+      hasInitialized.current = true
+      router.replace(`/chat?session=${fresh.id}`, { scroll: false })
     }
   }, [searchParams, currentSession, router])
 
   const handleSendMessage = async () => {
     if ((!inputValue.trim() && !selectedFile) || isLoading || isInitializing || !currentSession) return
+
+    const getFriendlyErrorMessage = (error: unknown) => {
+      const rawMessage = error instanceof APIError ? error.message : "Failed to get response. Please try again."
+      if (/gemini|google ai|high demand|quota|model/i.test(rawMessage)) {
+        return "Our legal analysis service is temporarily unavailable. Please try again later."
+      }
+      return rawMessage
+    }
 
     const userMessage: Message = {
       id: `msg_${Date.now()}`,
@@ -251,9 +268,7 @@ function ChatContent() {
       }
     } catch (error) {
       console.error("❌ Question failed:", error)
-      const errorMessage = error instanceof APIError 
-        ? error.message 
-        : "Failed to get response. Please try again."
+      const errorMessage = getFriendlyErrorMessage(error)
       
       setMessages(prev => 
         prev.map(msg => 
@@ -442,9 +457,15 @@ function ChatContent() {
                                       {message.cases.map((c, idx) => (
                                         <div key={idx} className="bg-background/60 backdrop-blur-sm border border-border/50 rounded-xl p-4 text-sm hover:border-primary/50 hover:shadow-md transition-all duration-300 group">
                                           <div className="flex justify-between items-start mb-2">
-                                            <a href={c.link || "#"} target="_blank" rel="noopener noreferrer" className="font-semibold text-primary group-hover:text-primary/80 transition-colors line-clamp-1 flex-1">
-                                              {c.title}
-                                            </a>
+                                            {c.link ? (
+                                              <a href={c.link} target="_blank" rel="noopener noreferrer" className="font-semibold text-primary group-hover:text-primary/80 transition-colors line-clamp-1 flex-1">
+                                                {c.title}
+                                              </a>
+                                            ) : (
+                                              <span className="font-semibold text-foreground line-clamp-1 flex-1">
+                                                {c.title}
+                                              </span>
+                                            )}
                                             <span className="text-xs text-muted-foreground ml-3 whitespace-nowrap bg-muted/80 px-2.5 py-1 rounded-full font-medium">
                                               {c.date}
                                             </span>

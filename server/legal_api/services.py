@@ -10,6 +10,8 @@ from typing import Dict, Optional
 import logging
 import json
 
+from .rag_pipeline import retrieve_relevant_cases
+
 logger = logging.getLogger(__name__)
 
 
@@ -251,35 +253,46 @@ class LegalModelService:
         Args:
             case_text: The case description
         """
-        prompt = f"""A user has presented the following legal situation. Analyze it thoroughly:
+        rag_context = build_rag_context(case_text)
+        prompt = f"""{rag_context}
 
-**Case Description:**
+You are a senior Indian legal expert and advocate with 20+ years of experience.
+Analyze the following legal situation under Indian law and provide a comprehensive,
+structured analysis.
+
+CASE/SITUATION:
 {case_text}
 
-**Please provide:**
+Provide your analysis in this EXACT structured format:
 
-1. **Case Type Classification**: Identify if this is Criminal, Civil, Family, Corporate, Property, or Labor related
+## ⚖️ CASE CLASSIFICATION
+[Case type: Criminal/Civil/Constitutional/Family/Property/Labor/Consumer]
 
-2. **Legal Issues Identified**: List all legal issues present in this situation
+## 📋 LEGAL ISSUES IDENTIFIED
+[List each distinct legal issue]
 
-3. **Applicable Laws**: 
-   - Cite specific sections, articles, or acts that apply
-   - Reference any landmark judgments if relevant
+## 🏛️ APPLICABLE LAWS & SECTIONS
+[Specific IPC sections, Acts, Articles of Constitution with exact section numbers]
 
-4. **Potential Outcomes**: 
-   - Best case scenario
-   - Worst case scenario
-   - Most likely outcome
+## 📚 RELEVANT PRECEDENTS
+[Reference any relevant cases from the knowledge base above, or cite known landmark Supreme Court judgments]
 
-5. **Recommended Next Steps**:
-   - Immediate actions to take
-   - Documents to gather
-   - Which court/authority to approach
-   - Time limitations under Limitation Act if applicable
+## 🔮 POTENTIAL OUTCOMES
+- **Best Case:** [scenario]
+- **Most Likely:** [scenario]
+- **Worst Case:** [scenario]
 
-6. **Important Warnings**: Any critical points the user should be aware of
+## ✅ RECOMMENDED ACTION PLAN
+[Numbered step-by-step actions the person should take immediately]
 
-Format your response clearly with headers."""
+## ⏰ TIME LIMITATIONS
+[Relevant statutes of limitation, deadlines]
+
+## ⚠️ CRITICAL WARNINGS
+[Important risks, things NOT to do]
+
+Be specific, cite exact law sections, and base your analysis on Indian jurisdiction only.
+"""
 
         result = self._make_request(prompt)
         
@@ -296,18 +309,34 @@ Format your response clearly with headers."""
         Args:
             question: The legal question
         """
-        prompt = f"""A user has asked the following legal question about Indian law:
+        rag_context = build_rag_context(question)
+        prompt = f"""{rag_context}
 
-**Question:** {question}
+    You are a senior Indian legal expert and advocate with 20+ years of experience.
+    Answer the following legal question under Indian law in a concise but thorough way.
 
-**Please provide:**
-1. A clear, direct answer
-2. Relevant legal provisions (sections, acts, articles)
-3. Any important Supreme Court or High Court precedents
-4. Practical guidance
-5. Any important caveats or warnings
+    QUESTION:
+    {question}
 
-Keep the response informative but accessible to a common citizen."""
+    Provide your answer in this structured format:
+
+    ## ✅ DIRECT ANSWER
+    [Clear and direct answer]
+
+    ## 📚 RELEVANT LEGAL PROVISIONS
+    [Specific sections, acts, and articles]
+
+    ## 🏛️ RELEVANT PRECEDENTS
+    [Any relevant landmark judgments or knowledge base references]
+
+    ## 🧭 PRACTICAL GUIDANCE
+    [Concrete next steps and practical advice]
+
+    ## ⚠️ IMPORTANT CAVEATS
+    [Warnings, limitations, and things to avoid]
+
+    Be specific and base the answer on Indian jurisdiction only.
+    """
 
         result = self._make_request(prompt)
         
@@ -372,6 +401,25 @@ Identify the primary type and any secondary types. Explain your reasoning briefl
             'classification': result['content'],
             'response_time': result['response_time']
         }
+
+
+def build_rag_context(query: str) -> str:
+    relevant_cases = retrieve_relevant_cases(query, n_results=5)
+    if not relevant_cases:
+        return ""
+
+    lines = [
+        "RELEVANT INDIAN LEGAL KNOWLEDGE BASE:",
+        "======================================",
+    ]
+
+    for index, item in enumerate(relevant_cases, start=1):
+        lines.append(f"{index}. Question: {item.get('instruction', '')}")
+        lines.append(f"     Answer: {item.get('response', '')[:600]}")
+
+    lines.append("")
+    lines.append("======================================")
+    return "\n".join(lines)
 
 
 # Singleton instance
