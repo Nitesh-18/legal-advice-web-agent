@@ -106,6 +106,10 @@ export function ChatSidebar({ currentSessionId, onNewChat }: ChatSidebarProps) {
     }
   }
 
+  if (!isAuth) {
+    return null;
+  }
+
   if (isCollapsed) {
     return (
       <div className="fixed left-0 top-0 h-full w-16 border-r bg-card z-40 flex flex-col items-center py-4">

@@ -9,13 +9,13 @@ import { Send, Loader2, AlertCircle, ArrowLeft, Bot, User, Paperclip, X, FileTex
 import { MarkdownRenderer } from "@/components/MarkdownRenderer"
 import { ChatSidebar } from "@/components/ChatSidebar"
 import { VoiceInput } from "@/components/VoiceInput"
-import { 
-  ChatSession, 
-  getChatSession, 
-  saveChatSession, 
+import {
+  ChatSession,
+  getChatSession,
+  saveChatSession,
   createNewSession,
 } from "@/lib/chatStorage"
-import { syncRemoteSession, getAuthToken } from "@/lib/api"
+import { syncRemoteSession, getAuthToken, fetchRemoteSessions } from "@/lib/api"
 
 function ChatContent() {
   const searchParams = useSearchParams()
@@ -31,9 +31,14 @@ function ChatContent() {
   const [showNoticeModal, setShowNoticeModal] = useState(false)
   const [noticeForm, setNoticeForm] = useState({ partyNames: '', issue: '', jurisdiction: '', emailTo: '' })
   const [noticeStatus, setNoticeStatus] = useState("")
-  
+  const [isAuth, setIsAuth] = useState(false)
+
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const hasInitialized = useRef(false)
+
+  useEffect(() => {
+    setIsAuth(!!getAuthToken())
+  }, [])
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -58,9 +63,9 @@ function ChatContent() {
         })),
         updatedAt: new Date()
       }
-      
+
       saveChatSession(updatedSession)
-      
+
       // Also try to sync remotely if authenticated
       if (getAuthToken()) {
         syncRemoteSession(updatedSession).then(res => {
@@ -81,36 +86,53 @@ function ChatContent() {
   useEffect(() => {
     // Prevent double initialization
     if (hasInitialized.current) return
-    
+
     const sessionId = searchParams.get("session")
     const caseParam = searchParams.get("case")
-    
+
     console.log("🔍 Initializing chat:", { sessionId, caseParam })
 
     if (sessionId) {
-      // Load existing session
-      const session = getChatSession(sessionId)
-      if (session) {
-        console.log("📂 Loading existing session:", session)
-        setCurrentSession(session)
-        setMessages(session.messages.map(msg => ({
-          ...msg,
-          timestamp: new Date(msg.timestamp)
-        })))
-        hasInitialized.current = true
+      if (getAuthToken()) {
+        fetchRemoteSessions().then(sessions => {
+          const session = sessions.find(s => s.id.toString() === sessionId)
+          if (session) {
+            console.log("📂 Loading existing remote session")
+            const formattedSession = {
+              ...session,
+              id: session.id.toString(),
+              createdAt: new Date(session.updated_at || Date.now()),
+              updatedAt: new Date(session.updated_at || Date.now()),
+              firstMessage: session.title,
+              messages: (session.messages || []).map((m: any) => ({
+                ...m,
+                timestamp: new Date(m.timestamp)
+              }))
+            }
+            setCurrentSession(formattedSession)
+            setMessages(formattedSession.messages)
+            hasInitialized.current = true
+          } else {
+            console.log("❌ Session not found, redirecting home")
+            router.push('/')
+          }
+        }).catch(err => {
+          console.error("Failed to fetch remote sessions", err)
+          router.push('/')
+        })
       } else {
-        console.log("❌ Session not found, redirecting home")
-        router.push('/')
+        // Anonymous users can't have persistent sessions to load
+        router.push('/chat')
       }
     } else if (caseParam && !currentSession) {
       console.log("🆕 Starting new chat with case")
       hasInitialized.current = true
       setIsInitializing(true)
-      
+
       // New chat from case submission
       const newSession = createNewSession(caseParam)
       setCurrentSession(newSession)
-      
+
       // Add user message
       const userMessage: Message = {
         id: `msg_${Date.now()}`,
@@ -118,7 +140,7 @@ function ChatContent() {
         content: caseParam,
         timestamp: new Date(),
       }
-      
+
       // Add loading message
       const loadingMessage: Message = {
         id: `msg_${Date.now() + 1}`,
@@ -127,10 +149,10 @@ function ChatContent() {
         timestamp: new Date(),
         loading: true,
       }
-      
+
       console.log("➕ Adding initial messages")
       setMessages([userMessage, loadingMessage])
-      
+
       // Analyze case
       console.log("🤖 Calling analyzeCase API...")
       analyzeCase(caseParam)
@@ -140,7 +162,7 @@ function ChatContent() {
             contentLength: response.analysis?.length,
             responseTime: response.response_time
           })
-          
+
           setMessages(prev => {
             const updated = prev.map(msg => {
               if (msg.loading) {
@@ -156,30 +178,30 @@ function ChatContent() {
             console.log("📝 Messages after update:", updated)
             return updated
           })
-          
+
           setIsInitializing(false)
         })
         .catch((error) => {
           console.error("❌ Analysis failed:", error)
-          const errorMessage = error instanceof APIError 
-            ? error.message 
+          const errorMessage = error instanceof APIError
+            ? error.message
             : "Failed to analyze case. Please try again."
-          
-          setMessages(prev => 
-            prev.map(msg => 
-              msg.loading 
-                ? { 
-                    ...msg, 
-                    content: `❌ **Error:** ${errorMessage}\n\nPlease try again or ask a different question.`, 
-                    loading: false 
-                  }
+
+          setMessages(prev =>
+            prev.map(msg =>
+              msg.loading
+                ? {
+                  ...msg,
+                  content: `❌ **Error:** ${errorMessage}\n\nPlease try again or ask a different question.`,
+                  loading: false
+                }
                 : msg
             )
           )
-          
+
           setIsInitializing(false)
         })
-      
+
       // Update URL with session ID
       router.replace(`/chat?session=${newSession.id}`, { scroll: false })
     } else if (!currentSession) {
@@ -188,9 +210,14 @@ function ChatContent() {
       const fresh = createNewSession("New Legal Query")
       setCurrentSession(fresh)
       setMessages([])
-      saveChatSession(fresh)
+      if (getAuthToken()) {
+        saveChatSession(fresh)
+      }
       hasInitialized.current = true
-      router.replace(`/chat?session=${fresh.id}`, { scroll: false })
+      // Don't update URL for anonymous users so they stay on /chat without a fake ID
+      if (getAuthToken()) {
+        router.replace(`/chat?session=${fresh.id}`, { scroll: false })
+      }
     }
   }, [searchParams, currentSession, router])
 
@@ -297,10 +324,10 @@ function ChatContent() {
         }
       } else {
         const response = await askLegalQuestion(currentInput, undefined, isOpposingMode ? 'opposing' : 'standard')
-        
-        setMessages(prev => 
-          prev.map(msg => 
-            msg.loading 
+
+        setMessages(prev =>
+          prev.map(msg =>
+            msg.loading
               ? { ...msg, content: response.answer, cases: response.cases, state: response.state, loading: false, mode: isOpposingMode ? 'opposing' : 'standard' }
               : msg
           )
@@ -309,15 +336,15 @@ function ChatContent() {
     } catch (error) {
       console.error("❌ Question failed:", error)
       const errorMessage = getFriendlyErrorMessage(error)
-      
-      setMessages(prev => 
-        prev.map(msg => 
-          msg.loading 
-            ? { 
-                ...msg, 
-                content: `❌ **Error:** ${errorMessage}`, 
-                loading: false 
-              }
+
+      setMessages(prev =>
+        prev.map(msg =>
+          msg.loading
+            ? {
+              ...msg,
+              content: `❌ **Error:** ${errorMessage}`,
+              loading: false
+            }
             : msg
         )
       )
@@ -385,13 +412,13 @@ function ChatContent() {
   return (
     <div className="flex h-screen bg-gradient-to-br from-background via-muted/30 to-background selection:bg-primary/20">
       {/* Sidebar */}
-      <ChatSidebar 
+      <ChatSidebar
         currentSessionId={currentSession?.id}
         onNewChat={handleNewChat}
       />
 
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col ml-80 bg-background/40 backdrop-blur-[2px]">
+      <div className={`flex-1 flex flex-col bg-background/40 backdrop-blur-[2px] transition-all duration-300 ${isAuth ? 'ml-80' : ''}`}>
         {/* Header */}
         <div className="border-b border-border/50 bg-background/80 backdrop-blur-md sticky top-0 z-10 shadow-sm">
           <div className="mx-auto max-w-5xl px-4 py-4">
@@ -415,9 +442,9 @@ function ChatContent() {
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <Button 
-                  variant={isOpposingMode ? "destructive" : "outline"} 
-                  size="sm" 
+                <Button
+                  variant={isOpposingMode ? "destructive" : "outline"}
+                  size="sm"
                   onClick={() => setIsOpposingMode(!isOpposingMode)}
                   className="transition-all"
                 >
@@ -445,9 +472,8 @@ function ChatContent() {
                 messages.map((message, index) => (
                   <div
                     key={message.id}
-                    className={`flex gap-4 ${
-                      message.role === "user" ? "justify-end" : "justify-start"
-                    }`}
+                    className={`flex gap-4 ${message.role === "user" ? "justify-end" : "justify-start"
+                      }`}
                   >
                     {message.role === "assistant" && (
                       <div className="flex-shrink-0 mt-2">
@@ -458,13 +484,12 @@ function ChatContent() {
                     )}
 
                     <div
-                      className={`max-w-[85%] overflow-hidden transition-all duration-300 animate-in fade-in slide-in-from-bottom-4 ${
-                        message.role === "user"
+                      className={`max-w-[85%] overflow-hidden transition-all duration-300 animate-in fade-in slide-in-from-bottom-4 ${message.role === "user"
                           ? "bg-gradient-to-tr from-primary to-primary/90 text-primary-foreground shadow-lg shadow-primary/20 rounded-2xl rounded-tr-sm"
                           : message.mode === 'opposing'
                             ? "bg-red-50/80 dark:bg-red-950/30 backdrop-blur-xl border border-red-200 dark:border-red-900/50 shadow-md rounded-2xl rounded-tl-sm text-foreground"
                             : "bg-card/80 backdrop-blur-xl border border-border/60 shadow-md rounded-2xl rounded-tl-sm text-foreground"
-                      }`}
+                        }`}
                     >
                       <div className="p-4">
                         {message.loading ? (
@@ -487,7 +512,7 @@ function ChatContent() {
                                   </div>
                                 )}
                                 <MarkdownRenderer content={message.content || "No content"} />
-                                
+
                                 {message.cases && message.cases.length > 0 && (
                                   <div className="mt-4 border-t pt-4">
                                     <h4 className="font-semibold text-sm mb-3 text-primary flex items-center gap-2">
@@ -553,7 +578,7 @@ function ChatContent() {
             <div className="mb-4 flex items-start gap-3 text-xs text-muted-foreground bg-amber-500/10 p-3.5 rounded-xl border border-amber-500/20 backdrop-blur-sm">
               <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0 text-amber-600 dark:text-amber-500" />
               <p>
-                This analysis is for informational purposes only and does not constitute legal advice. 
+                This analysis is for informational purposes only and does not constitute legal advice.
                 Please consult with a licensed advocate for formal legal representation.
               </p>
             </div>
@@ -570,21 +595,21 @@ function ChatContent() {
 
             <div className="flex gap-3 relative">
               <label className="flex-shrink-0 cursor-pointer h-[52px] w-[52px] flex items-center justify-center rounded-2xl bg-secondary/50 hover:bg-secondary border border-border/50 shadow-sm transition-all duration-200 group">
-                <input 
-                  type="file" 
-                  className="hidden" 
-                  accept=".pdf,.docx" 
+                <input
+                  type="file"
+                  className="hidden"
+                  accept=".pdf,.docx"
                   onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
                   disabled={isLoading || isInitializing}
                 />
                 <Paperclip className="h-5 w-5 text-muted-foreground group-hover:text-foreground transition-colors" />
               </label>
-              
-              <VoiceInput 
-                disabled={isLoading || isInitializing} 
-                onTranscript={(text) => setInputValue(prev => prev + text)} 
+
+              <VoiceInput
+                disabled={isLoading || isInitializing}
+                onTranscript={(text) => setInputValue(prev => prev + text)}
               />
-              
+
               <textarea
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
@@ -659,7 +684,7 @@ function ChatContent() {
               <div className="mt-4 p-4 bg-card border border-border rounded-xl shadow-sm animate-in fade-in slide-in-from-bottom-4">
                 <div className="flex justify-between items-center mb-3">
                   <h4 className="font-semibold flex items-center gap-2"><BarChart className="h-4 w-4 text-primary" /> Predictive Case Analytics</h4>
-                  <Button variant="ghost" size="sm" onClick={() => setAnalyticsData(null)}><X className="h-4 w-4"/></Button>
+                  <Button variant="ghost" size="sm" onClick={() => setAnalyticsData(null)}><X className="h-4 w-4" /></Button>
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                   <div className="bg-primary/5 p-3 rounded-lg">
@@ -696,23 +721,23 @@ function ChatContent() {
               <form onSubmit={handleSendNotice} className="space-y-4">
                 <div>
                   <label className="text-sm font-medium mb-1 block">Parties Involved</label>
-                  <input required className="w-full border rounded-lg p-2 text-sm" placeholder="e.g. Ramesh vs Suresh" value={noticeForm.partyNames} onChange={e => setNoticeForm({...noticeForm, partyNames: e.target.value})} />
+                  <input required className="w-full border rounded-lg p-2 text-sm" placeholder="e.g. Ramesh vs Suresh" value={noticeForm.partyNames} onChange={e => setNoticeForm({ ...noticeForm, partyNames: e.target.value })} />
                 </div>
                 <div>
                   <label className="text-sm font-medium mb-1 block">Issue Description</label>
-                  <textarea required className="w-full border rounded-lg p-2 text-sm h-20 resize-none" placeholder="Briefly describe the grievance..." value={noticeForm.issue} onChange={e => setNoticeForm({...noticeForm, issue: e.target.value})} />
+                  <textarea required className="w-full border rounded-lg p-2 text-sm h-20 resize-none" placeholder="Briefly describe the grievance..." value={noticeForm.issue} onChange={e => setNoticeForm({ ...noticeForm, issue: e.target.value })} />
                 </div>
                 <div>
                   <label className="text-sm font-medium mb-1 block">Jurisdiction (State/City)</label>
-                  <input required className="w-full border rounded-lg p-2 text-sm" placeholder="e.g. Delhi" value={noticeForm.jurisdiction} onChange={e => setNoticeForm({...noticeForm, jurisdiction: e.target.value})} />
+                  <input required className="w-full border rounded-lg p-2 text-sm" placeholder="e.g. Delhi" value={noticeForm.jurisdiction} onChange={e => setNoticeForm({ ...noticeForm, jurisdiction: e.target.value })} />
                 </div>
                 <div>
                   <label className="text-sm font-medium mb-1 block">Recipient Email (Dispatch)</label>
-                  <input type="email" required className="w-full border rounded-lg p-2 text-sm" placeholder="tenant@example.com" value={noticeForm.emailTo} onChange={e => setNoticeForm({...noticeForm, emailTo: e.target.value})} />
+                  <input type="email" required className="w-full border rounded-lg p-2 text-sm" placeholder="tenant@example.com" value={noticeForm.emailTo} onChange={e => setNoticeForm({ ...noticeForm, emailTo: e.target.value })} />
                 </div>
-                
+
                 {noticeStatus && <p className="text-sm font-medium text-primary">{noticeStatus}</p>}
-                
+
                 <div className="flex justify-end gap-2 pt-2">
                   <Button type="button" variant="outline" onClick={() => setShowNoticeModal(false)}>Cancel</Button>
                   <Button type="submit">Draft & Dispatch</Button>

@@ -109,7 +109,8 @@ def analyze_case(request):
                 question=case_text,
                 response=result['analysis'],
                 response_time=result['response_time'],
-                ip_address=get_client_ip(request)
+                ip_address=get_client_ip(request),
+                user=request.user if request.user.is_authenticated else None
             )
             
             return Response({
@@ -126,7 +127,8 @@ def analyze_case(request):
                 question=case_text,
                 error_occurred=True,
                 error_message=str(e),
-                ip_address=get_client_ip(request)
+                ip_address=get_client_ip(request),
+                user=request.user if request.user.is_authenticated else None
             )
             
             return Response(
@@ -301,7 +303,8 @@ def ask_legal_question(request):
                 question=question,
                 response=result['answer'],
                 response_time=result['response_time'],
-                ip_address=get_client_ip(request)
+                ip_address=get_client_ip(request),
+                user=request.user if request.user.is_authenticated else None
             )
             
             return Response({
@@ -320,7 +323,8 @@ def ask_legal_question(request):
                 question=question,
                 error_occurred=True,
                 error_message=str(e),
-                ip_address=get_client_ip(request)
+                ip_address=get_client_ip(request),
+                user=request.user if request.user.is_authenticated else None
             )
             
             return Response(
@@ -364,7 +368,8 @@ def explain_case_reasoning(request):
                 question=f"User case: {user_case[:100]}... | Precedent: {precedent_case[:100]}...",
                 response=result['explanation'],
                 response_time=result['response_time'],
-                ip_address=get_client_ip(request)
+                ip_address=get_client_ip(request),
+                user=request.user if request.user.is_authenticated else None
             )
             
             return Response({
@@ -380,7 +385,8 @@ def explain_case_reasoning(request):
                 question=f"User case: {user_case[:100]}...",
                 error_occurred=True,
                 error_message=str(e),
-                ip_address=get_client_ip(request)
+                ip_address=get_client_ip(request),
+                user=request.user if request.user.is_authenticated else None
             )
             
             return Response(
@@ -636,3 +642,29 @@ def predictive_analytics(request):
     
     analytics = orchestrator_service.get_predictive_analytics(case_type, court)
     return Response({'success': True, 'analytics': analytics})
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def admin_queries(request):
+    """
+    Get all queries for the admin dashboard
+    """
+    if not request.user.is_staff:
+        return Response({'error': 'Unauthorized'}, status=status.HTTP_403_FORBIDDEN)
+        
+    queries = LegalQuery.objects.all().order_by('-created_at')
+    
+    data = []
+    for q in queries:
+        data.append({
+            'id': q.id,
+            'timestamp': q.created_at.isoformat(),
+            'user': q.user.email if q.user and q.user.email else (q.user.username if q.user else 'Anonymous'),
+            'query_type': q.get_query_type_display(),
+            'question_preview': q.question[:100] + ('...' if len(q.question) > 100 else ''),
+            'response_time': q.response_time,
+            'error_occurred': q.error_occurred
+        })
+        
+    return Response({'success': True, 'queries': data})
+

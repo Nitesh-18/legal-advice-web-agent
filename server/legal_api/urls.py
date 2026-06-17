@@ -40,4 +40,5 @@ urlpatterns = [
     path('generate-notice/', views.generate_notice, name='generate_notice'),
     path('predictive-analytics/', views.predictive_analytics, name='predictive_analytics'),
     path('upload-knowledge/', views.upload_knowledge_document, name='upload_knowledge'),
+    path('admin/queries/', views.admin_queries, name='admin_queries'),
 ]

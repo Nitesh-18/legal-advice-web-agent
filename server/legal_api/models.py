@@ -19,6 +19,7 @@ class LegalQuery(models.Model):
     
     created_at = models.DateTimeField(default=timezone.now)
     ip_address = models.GenericIPAddressField(blank=True, null=True)
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='legal_queries')
     
     # Error tracking
     error_occurred = models.BooleanField(default=False)

@@ -37,23 +37,18 @@ export function Header() {
             <span className="text-lg font-bold text-foreground">Legal Advice Web Agent</span>
           </div>
 
-          {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center gap-8">
-            <Link href="#" className="text-sm font-medium text-foreground hover:text-primary transition-colors">
+            <Link href="/" className="text-sm font-medium text-foreground hover:text-primary transition-colors">
               Home
             </Link>
             <Link
-              href="#how-it-works"
+              href="/promotions"
               className="text-sm font-medium text-foreground hover:text-primary transition-colors"
             >
-              How it Works
+              Firm Directory
             </Link>
-
-            <Link href="#" className="text-sm font-medium text-foreground hover:text-primary transition-colors">
-              Features
-            </Link>
-            <Link href="#" className="text-sm font-medium text-foreground hover:text-primary transition-colors">
-              FAQ
+            <Link href="/admin" className="text-sm font-medium text-foreground hover:text-primary transition-colors">
+              Admin
             </Link>
           </nav>
 

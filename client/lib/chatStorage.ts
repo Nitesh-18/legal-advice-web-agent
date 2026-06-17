@@ -14,69 +14,24 @@ export interface ChatSession {
   }>
 }
 
-const STORAGE_KEY = 'legal_chat_sessions'
+// We no longer use localStorage for persisting sessions.
+// Authenticated users will use the backend.
+// Anonymous users will only have in-memory sessions that reset on refresh.
 
 export function getAllChatSessions(): ChatSession[] {
-  if (typeof window === 'undefined') return []
-  
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (!stored) return []
-    
-    const sessions = JSON.parse(stored)
-    // Convert date strings back to Date objects
-    return sessions.map((session: any) => ({
-      ...session,
-      createdAt: new Date(session.createdAt),
-      updatedAt: new Date(session.updatedAt),
-      messages: session.messages.map((msg: any) => ({
-        ...msg,
-        timestamp: new Date(msg.timestamp)
-      }))
-    }))
-  } catch (error) {
-    console.error('Error loading chat sessions:', error)
-    return []
-  }
+  return []
 }
 
 export function getChatSession(sessionId: string): ChatSession | null {
-  const sessions = getAllChatSessions()
-  return sessions.find(s => s.id === sessionId) || null
+  return null
 }
 
 export function saveChatSession(session: ChatSession): void {
-  if (typeof window === 'undefined') return
-  
-  try {
-    const sessions = getAllChatSessions()
-    const existingIndex = sessions.findIndex(s => s.id === session.id)
-    
-    if (existingIndex >= 0) {
-      sessions[existingIndex] = session
-    } else {
-      sessions.unshift(session) // Add new session at the beginning
-    }
-    
-    // Keep only last 50 sessions
-    const trimmedSessions = sessions.slice(0, 50)
-    
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmedSessions))
-  } catch (error) {
-    console.error('Error saving chat session:', error)
-  }
+  // No-op for local storage
 }
 
 export function deleteChatSession(sessionId: string): void {
-  if (typeof window === 'undefined') return
-  
-  try {
-    const sessions = getAllChatSessions()
-    const filtered = sessions.filter(s => s.id !== sessionId)
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered))
-  } catch (error) {
-    console.error('Error deleting chat session:', error)
-  }
+  // No-op for local storage
 }
 
 export function createNewSession(firstMessage: string): ChatSession {
@@ -91,7 +46,6 @@ export function createNewSession(firstMessage: string): ChatSession {
 }
 
 export function generateChatTitle(message: string): string {
-  // Extract first sentence or first 60 chars
   const firstSentence = message.split(/[.!?]/)[0]
   const title = firstSentence.length > 60 
     ? firstSentence.slice(0, 60) + '...'
